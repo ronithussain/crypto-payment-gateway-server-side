@@ -31,6 +31,7 @@ async function run() {
 
     const transactionCollection = client.db("cryptoDB").collection("transactions");
     const paymentsCollection = client.db("cryptoDB").collection("payment-proof");
+
     // jwt token api work start here:___________________;
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -120,7 +121,7 @@ async function run() {
         };
 
         const result = await transactionCollection.insertOne(transactionDoc);
-
+        console.log(result, 'all deposit and withdraw successful');
         return res.json({ success: true, insertedId: result.insertedId });
       } catch (error) {
         console.error('Transaction error:', error);
@@ -129,48 +130,19 @@ async function run() {
     });
 
     // only user balance show secure get api:
-    // Backend API fix করুন
-    // Complete API - Copy this and replace your existing /usersBalance/:id route
     app.get('/usersBalance/:id', verifyToken, async (req, res) => {
       const userId = req.params.id;
 
       try {
-        // 1. Find the user by ID
+        // শুধু user এর data নিন, কোন calculation না
         const user = await userCollection.findOne({ _id: new ObjectId(userId) });
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        // 2. Get all approved transactions (handle both string and ObjectId userId)
-        const transactions = await transactionCollection.find({
-          $or: [
-            { userId: userId },                    // string format
-            { userId: new ObjectId(userId) }       // ObjectId format
-          ],
-          status: 'approved'
-        }).toArray();
+        // ✅ user.balance এ সব কিছু ইতিমধ্যে calculated আছে
+        const finalBalance = user.balance || 0;
 
-        // 3. Calculate total deposit
-        const totalDeposit = transactions
-          .filter(tx => tx.type === 'deposit')
-          .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+        console.log('Simple balance for user:', userId, 'Balance:', finalBalance);
 
-        // 4. Calculate total withdraw (include fee)
-        const totalWithdraw = transactions
-          .filter(tx => tx.type === 'withdraw')
-          .reduce((sum, tx) => sum + (tx.amount || 0) + (tx.fee || 0), 0);
-
-        // 5. Final balance = user.balance (LiveProfit থেকে আসা) + transaction balance
-        const finalBalance = (user.balance || 0) + totalDeposit - totalWithdraw;
-
-        // 6. Debug log (optional - can remove in production)
-        console.log('Balance calculation for user:', userId, {
-          userBalance: user.balance || 0,
-          totalDeposit,
-          totalWithdraw,
-          finalBalance,
-          transactionsCount: transactions.length
-        });
-
-        // 7. Send combined response
         res.json({
           name: user.name,
           email: user.email,
@@ -178,7 +150,7 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('Error fetching user and balance:', error);
+        console.error('Error fetching user balance:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -303,42 +275,51 @@ async function run() {
     app.get('/api/transactions/pending', verifyToken, verifyAdmin, async (req, res) => {
       try {
         const search = req.query.search || '';
-        const regex = new RegExp(search, 'i');
 
-        const matchStage = {
-          status: 'pending',
-          $or: [
+        // Basic match stage for pending transactions
+        let matchStage = {
+          status: 'pending'
+        };
+
+        // Add search functionality only if search term exists
+        if (search && search.trim() !== '') {
+          const regex = new RegExp(search.trim(), 'i');
+          matchStage.$or = [
             { name: regex },
             { email: regex },
             { type: regex },
-            { paymentMethod: regex }, // ✅ method -> paymentMethod
-          ]
-        };
+            { paymentMethod: regex }
+          ];
 
-        if (!isNaN(search) && search !== '') {
-          matchStage.$or.push({ amount: Number(search) });
+          // Add amount search if search term is a number
+          if (!isNaN(search) && search !== '') {
+            matchStage.$or.push({ amount: Number(search) });
+          }
         }
+
+        console.log('Match stage:', JSON.stringify(matchStage, null, 2));
 
         const result = await transactionCollection.aggregate([
           { $match: matchStage },
 
-          // ✅ String to ObjectId conversion করে lookup
+          // Lookup with proper error handling
           {
             $lookup: {
               from: 'payment-proof',
-              let: { transactionIdStr: { $toString: "$_id" } }, // ObjectId কে String এ convert
+              let: { transactionIdStr: { $toString: "$_id" } },
               pipeline: [
                 {
                   $match: {
-                    $expr: { $eq: ["$transactionId", "$$transactionIdStr"] } // String matching
+                    $expr: { $eq: ["$transactionId", "$$transactionIdStr"] }
                   }
-                }
+                },
+                { $limit: 1 } // Only get first matching proof
               ],
               as: 'proofData'
             }
           },
 
-          // ✅ proofUrl extract
+          // Add proofUrl field
           {
             $addFields: {
               proofUrl: {
@@ -351,18 +332,42 @@ async function run() {
             }
           },
 
+          // Remove proofData from final result
           { $project: { proofData: 0 } },
+
+          // Sort by creation date (newest first)
           { $sort: { createdAt: -1 } }
         ]).toArray();
 
-        console.log('Pending transactions with proof:', result);
-        console.log('First transaction proofUrl:', result[0]?.proofUrl); // Debug log
+        console.log(`Found ${result.length} pending transactions`);
+
+        // Debug: Log first transaction
+        if (result.length > 0) {
+          console.log('First transaction:', {
+            id: result[0]._id,
+            name: result[0].name,
+            email: result[0].email,
+            amount: result[0].amount,
+            proofUrl: result[0].proofUrl ? 'Present' : 'Missing'
+          });
+        }
 
         res.json(result);
 
       } catch (error) {
-        console.error('Pending tx error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Pending transactions error:', error);
+        console.error('Error stack:', error.stack);
+
+        // Send more detailed error in development
+        if (process.env.NODE_ENV === 'development') {
+          res.status(500).json({
+            error: 'Internal server error',
+            message: error.message,
+            stack: error.stack
+          });
+        } else {
+          res.status(500).json({ error: 'Internal server error' });
+        }
       }
     });
 
@@ -405,9 +410,10 @@ async function run() {
 
 
     // admin panel user all deposit pending to approved status, decline, get api:
+    // Approve transaction API
+    // ✅ Approve API ও সরল করুন (আগের কোড ঠিক করে)
     app.patch('/api/transactions/approve/:id', verifyToken, verifyAdmin, async (req, res) => {
       const transactionId = req.params.id;
-      console.log(req.params.id);
 
       try {
         const transaction = await transactionCollection.findOne({ _id: new ObjectId(transactionId) });
@@ -425,22 +431,17 @@ async function run() {
         }
 
         let newBalance = user.balance || 0;
-        const withdrawalFee = 0.05;
+        const withdrawalFeeRate = 0.05; // 5%
 
+        // ✅ Balance update logic
         if (transaction.type === 'deposit') {
           newBalance += transaction.amount;
         }
-
-
-        if (transaction.type === 'deposit') {
-          newBalance += transaction.amount;
-
-        } else if (transaction.type === 'withdraw') {
-          // যদি fee আগেই না থাকে, তাহলে হিসাব করো
+        else if (transaction.type === 'withdraw') {
           let feeAmount = transaction.fee;
+
           if (feeAmount === undefined || feeAmount === null) {
-            feeAmount = transaction.amount * withdrawalFee;
-            // fee update করো transaction এ
+            feeAmount = transaction.amount * withdrawalFeeRate;
             await transactionCollection.updateOne(
               { _id: new ObjectId(transactionId) },
               { $set: { fee: feeAmount } }
@@ -450,29 +451,36 @@ async function run() {
           const totalDeduction = transaction.amount + feeAmount;
 
           if (newBalance < totalDeduction) {
-            return res.status(400).json({ error: 'Insufficient balance to approve withdrawal' });
+            return res.status(400).json({ error: 'Insufficient balance' });
           }
+
           newBalance -= totalDeduction;
         }
 
-        // ইউজার ব্যালেন্স update করো
+        // ✅ Update both transaction status and user balance
         await userCollection.updateOne(
           { _id: new ObjectId(transaction.userId) },
           { $set: { balance: newBalance } }
         );
 
-        // ট্রানজাকশন স্ট্যাটাস approved করো
         await transactionCollection.updateOne(
           { _id: new ObjectId(transactionId) },
-          { $set: { status: 'approved' } }
+          { $set: { status: 'approved', approvedAt: new Date() } }
         );
 
-        res.json({ success: true, newBalance });
+        console.log(`Transaction ${transactionId} approved. New balance: ${newBalance}`);
+
+        res.json({
+          message: 'Transaction approved successfully',
+          newBalance: Number(newBalance.toFixed(2))
+        });
+
       } catch (error) {
-        console.error('Approval error:', error);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Error approving transaction:', error);
+        res.status(500).json({ error: 'Failed to approve transaction' });
       }
     });
+
 
     // admin panel all user deposit pending to rejected decline patch api:
     app.patch('/api/transactions/reject/:id', verifyToken, verifyAdmin, async (req, res) => {
@@ -615,7 +623,6 @@ async function run() {
         res.status(500).send({ message: 'Failed to update role' });
       }
     });
-
 
     // user delete api start here:
     app.delete('/users/:id', verifyToken, verifyAdmin, async (req, res) => {
@@ -903,7 +910,7 @@ async function run() {
 
 
 
-    // daily Profit task work start here_____________________________________:
+    // daily Profit task-center work start here_____________________________________:
     // POST /complete-task
     // 1. GET user tasks - User এর completed tasks দেখার জন্য
     app.get('/userTasks/:userId', verifyToken, async (req, res) => {
@@ -1034,19 +1041,42 @@ async function run() {
         res.status(500).json({ error: 'Internal server error' });
       }
     });
-
-
-
-
-
     // daily Profit task work ends here_____________________________________:
 
 
+    // ✅ Check if user has deposited at least once
+    app.get('/api/check-deposit/:email', async (req, res) => {
+      try {
+        const email = req.params.email;
+
+        const deposit = await depositsCollection.findOne({ email: email });
+
+        if (deposit && deposit.amount > 0) {
+          return res.json({ hasDeposited: true });
+        } else {
+          return res.json({ hasDeposited: false });
+        }
+      } catch (error) {
+        console.error("Deposit check error:", error);
+        res.status(500).json({ error: 'Internal Server Error' });
+      }
+    });
+    // ✅ Check how many referrals a user has
+    app.get('/api/check-referrals/:email', async (req, res) => {
+      try {
+        const email = req.params.email;
+
+        const referralCount = await referralsCollection.countDocuments({ referredBy: email });
+
+        return res.json({ referrals: referralCount });
+      } catch (error) {
+        console.error("Referral check error:", error);
+        res.status(500).json({ error: 'Internal Server Error' });
+      }
+    });
 
 
 
-
-    // __________userCollection ends here _____________;
 
 
 
