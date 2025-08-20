@@ -77,9 +77,10 @@ async function run() {
     // __________transactionCollection start here___________;
     // deposit, withdraw and transaction post api
 
+    // deposit, withdraw and transaction post api
     app.post('/api/transactions', verifyToken, async (req, res) => {
       const { userId, type, name, email, amount, description, walletAddress, paymentMethod } = req.body;
-      console.log(req.body, 'payload');
+      // console.log(req.body, 'payload');
 
       if (!userId || !type || !amount) {
         return res.status(400).json({ error: 'Missing required fields' });
@@ -98,21 +99,32 @@ async function run() {
         const user = await userCollection.findOne({ _id: new ObjectId(userId) });
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        // fee এবং fee check বাদ দিলাম
-        // শুধু withdrawal হলে balance check (fee ছাড়াই)
+        // ✅ NEW: Withdrawal task completion check
         if (type === 'withdraw') {
+          const userTaskProgress = user.taskProgress || 0;
+
+          if (userTaskProgress < 50) {
+            return res.status(400).json({
+              error: 'Please complete tasks 1 to 50 before withdrawing',
+              taskProgress: userTaskProgress,
+              requiredTasks: 50
+            });
+          }
+
+          // Existing balance check
           if ((user.balance || 0) < amountNum) {
             return res.status(400).json({ error: 'Insufficient balance for withdrawal' });
           }
         }
 
+        // বাকি existing code unchanged...
         const transactionDoc = {
           name,
           email,
           userId,
           type,
           amount: amountNum,
-          fee: 0,           // fee 0 রাখলাম
+          fee: 0,
           status: 'pending',
           description,
           walletAddress: walletAddress || '',
@@ -121,7 +133,7 @@ async function run() {
         };
 
         const result = await transactionCollection.insertOne(transactionDoc);
-        console.log(result, 'all deposit and withdraw successful');
+        // console.log(result, 'all deposit and withdraw successful');
         return res.json({ success: true, insertedId: result.insertedId });
       } catch (error) {
         console.error('Transaction error:', error);
@@ -130,23 +142,42 @@ async function run() {
     });
 
     // only user balance show secure get api:
+    // 1. GET userBalance/:id - ইতিমধ্যে আছে, কিন্তু totalDeposits calculation যোগ করা দরকার
+    // Modify existing userBalance API to include totalDeposits
     app.get('/usersBalance/:id', verifyToken, async (req, res) => {
       const userId = req.params.id;
 
       try {
-        // শুধু user এর data নিন, কোন calculation না
         const user = await userCollection.findOne({ _id: new ObjectId(userId) });
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        // ✅ user.balance এ সব কিছু ইতিমধ্যে calculated আছে
+        // Calculate total approved deposits
+        const depositStats = await transactionCollection.aggregate([
+          {
+            $match: {
+              userId: userId,
+              type: 'deposit',
+              status: 'approved'
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalDeposits: { $sum: '$amount' }
+            }
+          }
+        ]).toArray();
+
+        const totalDeposits = depositStats.length > 0 ? depositStats[0].totalDeposits : 0;
         const finalBalance = user.balance || 0;
 
-        console.log('Simple balance for user:', userId, 'Balance:', finalBalance);
+        // console.log('Balance with deposits for user:', userId, 'Balance:', finalBalance, 'Deposits:', totalDeposits);
 
         res.json({
           name: user.name,
           email: user.email,
-          balance: Number(finalBalance.toFixed(2))
+          balance: Number(finalBalance.toFixed(2)),
+          totalDeposits: Number(totalDeposits.toFixed(2)) // Add totalDeposits
         });
 
       } catch (error) {
@@ -229,11 +260,14 @@ async function run() {
       }
 
       try {
-        // User এর taskProgress field update করুন
+        // ✅ taskProgressUpdatedAt field add করুন
         const result = await userCollection.updateOne(
           { _id: new ObjectId(userId) },
           {
-            $set: { taskProgress: progressNum }
+            $set: {
+              taskProgress: progressNum,
+              taskProgressUpdatedAt: new Date() // ✅ নতুন field update
+            }
           }
         );
 
@@ -241,13 +275,13 @@ async function run() {
           return res.status(404).json({ error: 'User not found or progress not updated' });
         }
 
-        // Debug log
-        console.log('Task progress updated for user:', userId, 'New progress:', progressNum);
+        // console.log('Task progress updated for user:', userId, 'New progress:', progressNum);
 
         res.json({
           success: true,
           message: 'Task progress updated successfully',
-          taskProgress: progressNum
+          taskProgress: progressNum,
+          updatedAt: new Date() // ✅ response এ timestamp add করুন
         });
 
       } catch (error) {
@@ -276,12 +310,10 @@ async function run() {
       try {
         const search = req.query.search || '';
 
-        // Basic match stage for pending transactions
         let matchStage = {
           status: 'pending'
         };
 
-        // Add search functionality only if search term exists
         if (search && search.trim() !== '') {
           const regex = new RegExp(search.trim(), 'i');
           matchStage.$or = [
@@ -291,18 +323,14 @@ async function run() {
             { paymentMethod: regex }
           ];
 
-          // Add amount search if search term is a number
           if (!isNaN(search) && search !== '') {
             matchStage.$or.push({ amount: Number(search) });
           }
         }
 
-        console.log('Match stage:', JSON.stringify(matchStage, null, 2));
-
         const result = await transactionCollection.aggregate([
           { $match: matchStage },
 
-          // Lookup with proper error handling
           {
             $lookup: {
               from: 'payment-proof',
@@ -313,13 +341,12 @@ async function run() {
                     $expr: { $eq: ["$transactionId", "$$transactionIdStr"] }
                   }
                 },
-                { $limit: 1 } // Only get first matching proof
+                { $limit: 1 }
               ],
               as: 'proofData'
             }
           },
 
-          // Add proofUrl field
           {
             $addFields: {
               proofUrl: {
@@ -332,22 +359,24 @@ async function run() {
             }
           },
 
-          // Remove proofData from final result
-          { $project: { proofData: 0 } },
+          // ✅ Make sure taskIndex field is included in the response (for task_reward transactions)
+          {
+            $project: {
+              proofData: 0  // Remove proofData but keep everything else including taskIndex
+            }
+          },
 
-          // Sort by creation date (newest first)
           { $sort: { createdAt: -1 } }
         ]).toArray();
 
-        console.log(`Found ${result.length} pending transactions`);
+        // console.log(`Found ${result.length} pending transactions`);
 
-        // Debug: Log first transaction
         if (result.length > 0) {
           console.log('First transaction:', {
             id: result[0]._id,
             name: result[0].name,
-            email: result[0].email,
-            amount: result[0].amount,
+            type: result[0].type,
+            taskIndex: result[0].taskIndex || 'N/A', // ✅ taskIndex log করুন
             proofUrl: result[0].proofUrl ? 'Present' : 'Missing'
           });
         }
@@ -356,21 +385,9 @@ async function run() {
 
       } catch (error) {
         console.error('Pending transactions error:', error);
-        console.error('Error stack:', error.stack);
-
-        // Send more detailed error in development
-        if (process.env.NODE_ENV === 'development') {
-          res.status(500).json({
-            error: 'Internal server error',
-            message: error.message,
-            stack: error.stack
-          });
-        } else {
-          res.status(500).json({ error: 'Internal server error' });
-        }
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
-
 
     // admin approved transaction api use aggregate pipeline:
     app.get('/api/transactions/deposits', verifyToken, verifyAdmin, async (req, res) => {
@@ -408,9 +425,7 @@ async function run() {
       }
     });
 
-
     // admin panel user all deposit pending to approved status, decline, get api:
-    // Approve transaction API
     // ✅ Approve API ও সরল করুন (আগের কোড ঠিক করে)
     app.patch('/api/transactions/approve/:id', verifyToken, verifyAdmin, async (req, res) => {
       const transactionId = req.params.id;
@@ -431,11 +446,13 @@ async function run() {
         }
 
         let newBalance = user.balance || 0;
-        const withdrawalFeeRate = 0.05; // 5%
+        let newTotalDeposits = user.totalDeposits || 0; // ✅ নতুন variable
+        const withdrawalFeeRate = 0.05;
 
-        // ✅ Balance update logic
+        // Balance update logic
         if (transaction.type === 'deposit') {
           newBalance += transaction.amount;
+          newTotalDeposits += transaction.amount; // ✅ totalDeposits update
         }
         else if (transaction.type === 'withdraw') {
           let feeAmount = transaction.fee;
@@ -457,10 +474,20 @@ async function run() {
           newBalance -= totalDeduction;
         }
 
-        // ✅ Update both transaction status and user balance
+        // ✅ Update user with balance AND totalDeposits
+        const updateData = {
+          balance: newBalance
+        };
+
+        // শুধু deposit approve করার সময় totalDeposits update করুন
+        if (transaction.type === 'deposit') {
+          updateData.totalDeposits = newTotalDeposits;
+          updateData.totalDepositsUpdatedAt = new Date(); // ✅ timestamp update
+        }
+
         await userCollection.updateOne(
           { _id: new ObjectId(transaction.userId) },
-          { $set: { balance: newBalance } }
+          { $set: updateData }
         );
 
         await transactionCollection.updateOne(
@@ -468,11 +495,12 @@ async function run() {
           { $set: { status: 'approved', approvedAt: new Date() } }
         );
 
-        console.log(`Transaction ${transactionId} approved. New balance: ${newBalance}`);
+        // console.log(`Transaction ${transactionId} approved. New balance: ${newBalance}, Total deposits: ${newTotalDeposits}`);
 
         res.json({
           message: 'Transaction approved successfully',
-          newBalance: Number(newBalance.toFixed(2))
+          newBalance: Number(newBalance.toFixed(2)),
+          totalDeposits: Number(newTotalDeposits.toFixed(2)) // ✅ response এ add করুন
         });
 
       } catch (error) {
@@ -480,7 +508,6 @@ async function run() {
         res.status(500).json({ error: 'Failed to approve transaction' });
       }
     });
-
 
     // admin panel all user deposit pending to rejected decline patch api:
     app.patch('/api/transactions/reject/:id', verifyToken, verifyAdmin, async (req, res) => {
@@ -538,7 +565,7 @@ async function run() {
           status: 'pending' // ✅ default status add করা
         });
 
-        console.log(result, 'payment proof saved successfully');
+        // console.log(result, 'payment proof saved successfully');
         res.status(201).json({
           success: true,
           insertedId: result.insertedId,
@@ -553,11 +580,6 @@ async function run() {
         });
       }
     });
-
-
-
-
-
 
 
 
@@ -665,7 +687,7 @@ async function run() {
     app.post('/users', async (req, res) => {
       try {
         const user = req.body;
-        console.log('Received user data:', user); // Debug log
+        // console.log('Received user data:', user);
 
         // Check if user already exists
         const query = { email: user.email };
@@ -674,7 +696,7 @@ async function run() {
           return res.send({
             message: 'User already exists',
             insertedId: null,
-            referralCode: existingUser.referralCode // Send existing code
+            referralCode: existingUser.referralCode
           });
         }
 
@@ -692,12 +714,11 @@ async function run() {
           attempts++;
         }
 
-        // Fallback if unable to generate unique code
         if (!isUnique) {
           referralCode = `${user.email.substring(0, 3).toUpperCase()}${Date.now().toString().slice(-3)}`;
         }
 
-        // Create new user data
+        // ✅ Create new user data with MISSING FIELDS
         const newUser = {
           name: user.name,
           email: user.email,
@@ -706,17 +727,23 @@ async function run() {
           totalReferrals: 0,
           balance: 0,
           taskProgress: 0,
+
+          // ✅ ADD THESE MISSING FIELDS:
+          totalDeposits: 0,                    // নতুন field
+          taskProgressUpdatedAt: new Date(),   // নতুন field  
+          totalDepositsUpdatedAt: new Date(),  // নতুন field
+
           createdAt: new Date()
         };
 
-        console.log('Creating user with data:', newUser); // Debug log
+        // console.log('Creating user with data:', newUser);
 
         const result = await userCollection.insertOne(newUser);
 
         // Handle referral reward
         let referralReward = false;
         if (user.referralCodeFromFrontend) {
-          console.log('Processing referral code:', user.referralCodeFromFrontend); // Debug log
+          // console.log('Processing referral code:', user.referralCodeFromFrontend);
 
           const refUser = await userCollection.findOne({
             referralCode: user.referralCodeFromFrontend.trim().toUpperCase()
@@ -734,7 +761,7 @@ async function run() {
               }
             );
             referralReward = true;
-            console.log('Referral reward applied to:', refUser.name); // Debug log
+            // console.log('Referral reward applied to:', refUser.name);
           }
         }
 
@@ -758,7 +785,7 @@ async function run() {
     app.post('/validate-referral', async (req, res) => {
       try {
         const { referralCode } = req.body;
-        console.log('Validating referral code:', referralCode); // Debug log
+        // console.log('Validating referral code:', referralCode); // Debug log
 
         if (!referralCode || referralCode.length < 3) {
           return res.json({
@@ -772,14 +799,14 @@ async function run() {
         });
 
         if (refUser) {
-          console.log('Valid referral code found for user:', refUser.name); // Debug log
+          // console.log('Valid referral code found for user:', refUser.name); // Debug log
           res.json({
             valid: true,
             message: 'Valid referral code',
             referrerName: refUser.name
           });
         } else {
-          console.log('Invalid referral code:', referralCode); // Debug log
+          // console.log('Invalid referral code:', referralCode); // Debug log
           res.json({
             valid: false,
             message: 'Invalid referral code'
@@ -799,7 +826,7 @@ async function run() {
     app.get('/referral-info/:email', async (req, res) => {
       try {
         const email = req.params.email;
-        console.log('Fetching referral info for:', email); // Debug log
+        // console.log('Fetching referral info for:', email); // Debug log
 
         const user = await userCollection.findOne({ email });
 
@@ -831,7 +858,7 @@ async function run() {
           totalReferrals: user.totalReferrals || 0
         };
 
-        console.log('Sending referral info:', responseData); // Debug log
+        // console.log('Sending referral info:', responseData); // Debug log
         res.json(responseData);
 
       } catch (error) {
@@ -944,7 +971,7 @@ async function run() {
       try {
         const { userId, taskId, reward, timestamp } = req.body;
 
-        console.log('Complete Task Request:', { userId, taskId, reward });
+        // console.log('Complete Task Request:', { userId, taskId, reward });
 
         // Validation
         if (!userId || !taskId || !reward) {
@@ -1027,7 +1054,7 @@ async function run() {
           return res.status(500).json({ error: 'Failed to update user data' });
         }
 
-        console.log(`Task ${taskId} completed for user ${userId}. Reward: $${rewardAmount}`);
+        // console.log(`Task ${taskId} completed for user ${userId}. Reward: $${rewardAmount}`);
 
         res.json({
           success: true,
@@ -1044,34 +1071,368 @@ async function run() {
     // daily Profit task work ends here_____________________________________:
 
 
-    // ✅ Check if user has deposited at least once
-    app.get('/api/check-deposit/:email', async (req, res) => {
+
+
+
+
+
+
+
+    // 1. GET userReferrals/:userId - নতুন API যোগ করা দরকার
+    app.get('/userReferrals/:userId', verifyToken, async (req, res) => {
       try {
-        const email = req.params.email;
+        const userId = req.params.userId;
 
-        const deposit = await depositsCollection.findOne({ email: email });
-
-        if (deposit && deposit.amount > 0) {
-          return res.json({ hasDeposited: true });
-        } else {
-          return res.json({ hasDeposited: false });
+        if (!ObjectId.isValid(userId)) {
+          return res.status(400).json({ error: 'Invalid user ID' });
         }
+
+        const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+        if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Get referrals count from user document or count them
+        let totalReferrals = user.totalReferrals || 0;
+
+        // If not stored, count referrals by referralCode
+        if (!totalReferrals && user.referralCode) {
+          const referralCount = await userCollection.countDocuments({
+            referredBy: user.referralCode
+          });
+          totalReferrals = referralCount;
+        }
+
+        res.json({
+          totalReferrals: totalReferrals,
+          referralCode: user.referralCode,
+          referralBalance: user.referralBalance || 0,
+          userId: userId
+        });
+
       } catch (error) {
-        console.error("Deposit check error:", error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        console.error('Error fetching user referrals:', error);
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
-    // ✅ Check how many referrals a user has
-    app.get('/api/check-referrals/:email', async (req, res) => {
+
+    // 2. POST validateTaskAccess/:userId - নতুন validation API
+    app.post('/validateTaskAccess/:userId', verifyToken, async (req, res) => {
       try {
-        const email = req.params.email;
+        const userId = req.params.userId;
+        const { taskIndex } = req.body;
 
-        const referralCount = await referralsCollection.countDocuments({ referredBy: email });
+        if (!ObjectId.isValid(userId)) {
+          return res.status(400).json({ error: 'Invalid user ID' });
+        }
 
-        return res.json({ referrals: referralCount });
+        if (typeof taskIndex !== 'number' || taskIndex < 0) {
+          return res.status(400).json({ error: 'Invalid task index' });
+        }
+
+        // Get user data
+        const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+        if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Get total approved deposits
+        const depositStats = await transactionCollection.aggregate([
+          {
+            $match: {
+              userId: userId,
+              type: 'deposit',
+              status: 'approved'
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalDeposits: { $sum: '$amount' }
+            }
+          }
+        ]).toArray();
+
+        const totalDeposits = depositStats.length > 0 ? depositStats[0].totalDeposits : 0;
+        const totalReferrals = user.totalReferrals || 0;
+
+        // Task requirements matching frontend surveyTasks array
+        const taskRequirements = {
+          // First task requires $50 minimum deposit
+          0: { minDeposit: 50 },
+
+          // Task 17 (index 16) requires 10 referrals
+          16: { requiredReferrals: 10 },
+
+          // Special deposit tasks matching frontend
+          25: { requiredDeposit: 80 },    // Task 26
+          30: { requiredDeposit: 140 },   // Task 31  
+          36: { requiredDeposit: 320 },   // Task 37
+          39: { requiredDeposit: 730 },   // Task 40
+          41: { requiredDeposit: 1300 },  // Task 42
+          42: { requiredDeposit: 2500 },  // Task 43
+          43: { requiredDeposit: 5000 },  // Task 44
+          44: { requiredDeposit: 8000 },  // Task 45
+          45: { requiredDeposit: 15000 }, // Task 46
+          46: { requiredDeposit: 25000 }, // Task 47
+          47: { requiredDeposit: 40000 }, // Task 48
+          48: { requiredDeposit: 60000 }, // Task 49
+          49: { requiredDeposit: 100000 } // Task 50
+        };
+
+        const requirement = taskRequirements[taskIndex];
+        let validation = { valid: true };
+
+        if (requirement) {
+          // Check minimum deposit for first task
+          if (requirement.minDeposit && totalDeposits < requirement.minDeposit) {
+            validation = {
+              valid: false,
+              type: 'initial_deposit',
+              required: requirement.minDeposit,
+              message: `Minimum deposit of $${requirement.minDeposit} required`
+            };
+          }
+          // Check referrals requirement
+          else if (requirement.requiredReferrals && totalReferrals < requirement.requiredReferrals) {
+            validation = {
+              valid: false,
+              type: 'referrals',
+              required: requirement.requiredReferrals,
+              current: totalReferrals,
+              message: `${requirement.requiredReferrals} referrals required`
+            };
+          }
+          // Check special deposit requirement
+          else if (requirement.requiredDeposit && totalDeposits < requirement.requiredDeposit) {
+            validation = {
+              valid: false,
+              type: 'deposit',
+              required: requirement.requiredDeposit,
+              message: `Deposit of $${requirement.requiredDeposit} required`
+            };
+          }
+        }
+
+        res.json({
+          validation,
+          userStats: {
+            totalDeposits,
+            totalReferrals,
+            taskProgress: user.taskProgress || 0,
+            balance: user.balance || 0
+          }
+        });
+
       } catch (error) {
-        console.error("Referral check error:", error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        console.error('Error validating task access:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+
+    // 3. POST completeTaskProfit/:userId - নতুন API task complete এর জন্য
+    app.post('/completeTaskProfit/:userId', verifyToken, async (req, res) => {
+      try {
+        const userId = req.params.userId;
+        const { taskIndex, reward } = req.body;
+
+        if (!ObjectId.isValid(userId)) {
+          return res.status(400).json({ error: 'Invalid user ID' });
+        }
+
+        if (typeof taskIndex !== 'number' || typeof reward !== 'number') {
+          return res.status(400).json({ error: 'Invalid task data' });
+        }
+
+        const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+        if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        const currentProgress = user.taskProgress || 0;
+        if (currentProgress !== taskIndex) {
+          return res.status(400).json({ error: 'Invalid task sequence' });
+        }
+
+        const session = client.startSession();
+
+        try {
+          await session.withTransaction(async () => {
+            // ✅ taskProgressUpdatedAt field update করুন
+            await userCollection.updateOne(
+              { _id: new ObjectId(userId) },
+              {
+                $inc: { balance: reward },
+                $set: {
+                  taskProgress: currentProgress + 1,
+                  taskProgressUpdatedAt: new Date() // ✅ এই field update করুন
+                }
+              },
+              { session }
+            );
+
+            // Record task completion transaction with taskIndex
+            await transactionCollection.insertOne({
+              userId: userId,
+              type: 'task_reward',
+              amount: reward,
+              description: `Live Trading Task ${taskIndex + 1} completion reward`,
+              status: 'approved',
+              taskIndex: taskIndex, // ✅ এই field frontend এ দেখাবে
+              createdAt: new Date(),
+              name: user.name,
+              email: user.email
+            }, { session });
+          });
+
+          // console.log(`LiveProfit Task ${taskIndex + 1} completed for user ${userId}. Reward: $${reward}`);
+
+          res.json({
+            success: true,
+            message: 'Task completed successfully',
+            reward: reward,
+            newTaskProgress: currentProgress + 1,
+            newBalance: (user.balance || 0) + reward,
+            updatedAt: new Date() // ✅ response এ timestamp add করুন
+          });
+
+        } finally {
+          await session.endSession();
+        }
+
+      } catch (error) {
+        console.error('Error completing live profit task:', error);
+        res.status(500).json({
+          error: error.message || 'Internal server error'
+        });
+      }
+    });
+
+
+    // 4. GET userStats/:userId - Comprehensive stats API
+    app.get('/userStats/:userId', verifyToken, async (req, res) => {
+      try {
+        const userId = req.params.userId;
+
+        if (!ObjectId.isValid(userId)) {
+          return res.status(400).json({ error: 'Invalid user ID' });
+        }
+
+        const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+        if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Get deposit stats
+        const depositStats = await transactionCollection.aggregate([
+          {
+            $match: {
+              userId: userId,
+              type: 'deposit',
+              status: 'approved'
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalDeposits: { $sum: '$amount' },
+              depositCount: { $sum: 1 }
+            }
+          }
+        ]).toArray();
+
+        // Get live trading task stats
+        const taskStats = await transactionCollection.aggregate([
+          {
+            $match: {
+              userId: userId,
+              type: 'task_reward'
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalTaskRewards: { $sum: '$amount' },
+              completedTasks: { $sum: 1 }
+            }
+          }
+        ]).toArray();
+
+        const stats = {
+          balance: user.balance || 0,
+          taskProgress: user.taskProgress || 0,
+          totalReferrals: user.totalReferrals || 0,
+          referralBalance: user.referralBalance || 0,
+          totalDeposits: depositStats.length > 0 ? depositStats[0].totalDeposits : 0,
+          depositCount: depositStats.length > 0 ? depositStats[0].depositCount : 0,
+          totalTaskRewards: taskStats.length > 0 ? taskStats[0].totalTaskRewards : 0,
+          completedLiveTasks: taskStats.length > 0 ? taskStats[0].completedTasks : 0,
+          referralCode: user.referralCode,
+          email: user.email,
+          name: user.name
+        };
+
+        res.json({
+          success: true,
+          stats: stats
+        });
+
+      } catch (error) {
+        console.error('Error fetching user stats:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+
+    // ==================== Helper APIs ====================
+
+    // 5. PATCH updateTotalDeposits/:userId - Helper for when deposits are approved
+    app.patch('/updateTotalDeposits/:userId', verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const userId = req.params.userId;
+
+        if (!ObjectId.isValid(userId)) {
+          return res.status(400).json({ error: 'Invalid user ID' });
+        }
+
+        // Calculate total approved deposits
+        const depositStats = await transactionCollection.aggregate([
+          {
+            $match: {
+              userId: userId,
+              type: 'deposit',
+              status: 'approved'
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalDeposits: { $sum: '$amount' }
+            }
+          }
+        ]).toArray();
+
+        const totalDeposits = depositStats.length > 0 ? depositStats[0].totalDeposits : 0;
+
+        // Update user document with total deposits
+        await userCollection.updateOne(
+          { _id: new ObjectId(userId) },
+          {
+            $set: {
+              totalDeposits: totalDeposits,
+              totalDepositsUpdatedAt: new Date()
+            }
+          }
+        );
+
+        res.json({
+          success: true,
+          totalDeposits: totalDeposits,
+          message: 'Total deposits updated'
+        });
+
+      } catch (error) {
+        console.error('Error updating total deposits:', error);
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
 
@@ -1085,11 +1446,79 @@ async function run() {
 
 
 
+    // Migration route - একবার চালান existing users এর জন্য
+    app.post('/migrate-user-fields', verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        // console.log('Starting user fields migration...');
 
+        // Find all users without the new fields
+        const usersToUpdate = await userCollection.find({
+          $or: [
+            { totalDeposits: { $exists: false } },
+            { taskProgressUpdatedAt: { $exists: false } },
+            { totalDepositsUpdatedAt: { $exists: false } }
+          ]
+        }).toArray();
+
+        // console.log(`Found ${usersToUpdate.length} users to update`);
+
+        let updatedCount = 0;
+
+        for (const user of usersToUpdate) {
+          // Calculate actual totalDeposits for each user
+          const depositStats = await transactionCollection.aggregate([
+            {
+              $match: {
+                userId: user._id.toString(),
+                type: 'deposit',
+                status: 'approved'
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                totalDeposits: { $sum: '$amount' }
+              }
+            }
+          ]).toArray();
+
+          const actualTotalDeposits = depositStats.length > 0 ? depositStats[0].totalDeposits : 0;
+
+          // Update user with missing fields
+          await userCollection.updateOne(
+            { _id: user._id },
+            {
+              $set: {
+                totalDeposits: actualTotalDeposits,
+                taskProgressUpdatedAt: user.createdAt || new Date(),
+                totalDepositsUpdatedAt: user.createdAt || new Date()
+              }
+            }
+          );
+
+          updatedCount++;
+        }
+
+        // console.log(`Migration completed. Updated ${updatedCount} users.`);
+
+        res.json({
+          success: true,
+          message: `Migration completed successfully`,
+          updatedUsers: updatedCount
+        });
+
+      } catch (error) {
+        console.error('Migration error:', error);
+        res.status(500).json({
+          error: 'Migration failed',
+          message: error.message
+        });
+      }
+    });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
@@ -1104,5 +1533,5 @@ app.get('/', (req, res) => {
 })
 
 app.listen(port, () => {
-  console.log(`Crypto is sitting on port ${port}`);
+  // console.log(`Crypto is sitting on port ${port}`);
 })
