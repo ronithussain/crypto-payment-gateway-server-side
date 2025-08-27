@@ -136,7 +136,7 @@ async function run() {
         // console.log(result, 'all deposit and withdraw successful');
         return res.json({ success: true, insertedId: result.insertedId });
       } catch (error) {
-        console.error('Transaction error:', error);
+        // console.error('Transaction error:', error);
         return res.status(500).json({ error: 'Server error' });
       }
     });
@@ -181,7 +181,7 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('Error fetching user balance:', error);
+        // console.error('Error fetching user balance:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -211,7 +211,7 @@ async function run() {
 
         res.json({ success: true, message: 'Balance updated successfully' });
       } catch (error) {
-        console.error('Balance update error:', error);
+        // console.error('Balance update error:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -240,7 +240,7 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('Error fetching task progress:', error);
+        // console.error('Error fetching task progress:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -285,7 +285,7 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('Task progress update error:', error);
+        // console.error('Task progress update error:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -299,7 +299,7 @@ async function run() {
 
         res.json({ success: true, transactions });
       } catch (error) {
-        console.error('Transaction history error:', error);
+        // console.error('Transaction history error:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -372,19 +372,19 @@ async function run() {
         // console.log(`Found ${result.length} pending transactions`);
 
         if (result.length > 0) {
-          console.log('First transaction:', {
-            id: result[0]._id,
-            name: result[0].name,
-            type: result[0].type,
-            taskIndex: result[0].taskIndex || 'N/A', // ✅ taskIndex log করুন
-            proofUrl: result[0].proofUrl ? 'Present' : 'Missing'
-          });
+          // console.log('First transaction:', {
+          //   id: result[0]._id,
+          //   name: result[0].name,
+          //   type: result[0].type,
+          //   taskIndex: result[0].taskIndex || 'N/A', // ✅ taskIndex log করুন
+          //   proofUrl: result[0].proofUrl ? 'Present' : 'Missing'
+          // });
         }
 
         res.json(result);
 
       } catch (error) {
-        console.error('Pending transactions error:', error);
+        // console.error('Pending transactions error:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -420,7 +420,7 @@ async function run() {
 
         res.json({ success: true, deposits });
       } catch (error) {
-        console.error('Deposit fetch error:', error);
+        // console.error('Deposit fetch error:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -504,7 +504,7 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('Error approving transaction:', error);
+        // console.error('Error approving transaction:', error);
         res.status(500).json({ error: 'Failed to approve transaction' });
       }
     });
@@ -528,7 +528,7 @@ async function run() {
 
         res.json({ success: true, message: 'Transaction rejected' });
       } catch (error) {
-        console.error('Reject error:', error);
+        // console.error('Reject error:', error);
         res.status(500).json({ error: 'Server error' });
       }
     });
@@ -573,7 +573,7 @@ async function run() {
         });
 
       } catch (err) {
-        console.error("Payment proof save error:", err);
+        // console.error("Payment proof save error:", err);
         res.status(500).json({
           error: "Failed to save payment proof",
           details: err.message // ✅ error details add করা debugging এর জন্য
@@ -605,7 +605,7 @@ async function run() {
 
         res.json(user);
       } catch (error) {
-        console.error('Get user by email error:', error);
+        // console.error('Get user by email error:', error);
         res.status(500).json({ error: 'Server error' });
       }
     });
@@ -641,7 +641,7 @@ async function run() {
         const result = await userCollection.updateOne(filter, updatedDoc);
         res.send(result);
       } catch (error) {
-        console.error(error);
+        // console.error(error);
         res.status(500).send({ message: 'Failed to update role' });
       }
     });
@@ -773,11 +773,11 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('User registration error:', error);
-        res.status(500).send({
-          message: 'Internal server error',
-          error: error.message
-        });
+        // console.error('User registration error:', error);
+        // res.status(500).send({
+        //   message: 'Internal server error',
+        //   error: error.message
+        // });
       }
     });
 
@@ -813,12 +813,12 @@ async function run() {
           });
         }
       } catch (error) {
-        console.error('Referral validation error:', error);
-        res.status(500).json({
-          valid: false,
-          message: 'Server error',
-          error: error.message
-        });
+        // console.error('Referral validation error:', error);
+        // res.status(500).json({
+        //   valid: false,
+        //   message: 'Server error',
+        //   error: error.message
+        // });
       }
     });
 
@@ -862,7 +862,7 @@ async function run() {
         res.json(responseData);
 
       } catch (error) {
-        console.error('Get referral info error:', error);
+        // console.error('Get referral info error:', error);
         res.status(500).json({
           message: 'Internal server error',
           error: error.message,
@@ -888,7 +888,7 @@ async function run() {
           users: users
         });
       } catch (error) {
-        console.error('Debug users error:', error);
+        // console.error('Debug users error:', error);
         res.status(500).json({ message: 'Error fetching users' });
       }
     });
@@ -926,7 +926,7 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('Regenerate referral error:', error);
+        // console.error('Regenerate referral error:', error);
         res.status(500).json({ message: 'Error regenerating referral code' });
       }
     });
@@ -961,7 +961,7 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('Get user tasks error:', error);
+        // console.error('Get user tasks error:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -1064,7 +1064,7 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('Complete task error:', error);
+        // console.error('Complete task error:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -1111,12 +1111,205 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('Error fetching user referrals:', error);
+        // console.error('Error fetching user referrals:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
 
     // 2. POST validateTaskAccess/:userId - নতুন validation API
+    // app.post('/validateTaskAccess/:userId', verifyToken, async (req, res) => {
+    //   try {
+    //     const userId = req.params.userId;
+    //     const { taskIndex } = req.body;
+
+    //     if (!ObjectId.isValid(userId)) {
+    //       return res.status(400).json({ error: 'Invalid user ID' });
+    //     }
+
+    //     if (typeof taskIndex !== 'number' || taskIndex < 0) {
+    //       return res.status(400).json({ error: 'Invalid task index' });
+    //     }
+
+    //     // Get user data
+    //     const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+    //     if (!user) {
+    //       return res.status(404).json({ error: 'User not found' });
+    //     }
+
+    //     // Get total approved deposits
+    //     const depositStats = await transactionCollection.aggregate([
+    //       {
+    //         $match: {
+    //           userId: userId,
+    //           type: 'deposit',
+    //           status: 'approved'
+    //         }
+    //       },
+    //       {
+    //         $group: {
+    //           _id: null,
+    //           totalDeposits: { $sum: '$amount' }
+    //         }
+    //       }
+    //     ]).toArray();
+
+    //     const totalDeposits = depositStats.length > 0 ? depositStats[0].totalDeposits : 0;
+    //     const totalReferrals = user.totalReferrals || 0;
+
+    //     // Task requirements matching frontend surveyTasks array
+    //     const taskRequirements = {
+    //       // First task requires $50 minimum deposit
+    //       0: { minDeposit: 50 },
+
+    //       // Task 17 (index 16) requires 10 referrals
+    //       16: { requiredReferrals: 10 },
+
+    //       // ✅ CORRECTED Special deposit tasks
+    //       25: { requiredDeposit: 80 },     // Task 26
+    //       30: { requiredDeposit: 140 },    // Task 31  
+    //       36: { requiredDeposit: 320 },    // Task 37
+    //       39: { requiredDeposit: 730 },    // Task 40
+    //       41: { requiredDeposit: 1300 },   // Task 42 
+    //       42: { requiredDeposit: 1500 },   // Task 43 ✅ FIXED (আগে 2500 ছিল)
+    //       43: { requiredDeposit: 2500 },   // Task 44 ✅ FIXED (আগে 5000 ছিল)
+    //       44: { requiredDeposit: 8000 },   // Task 45
+    //       45: { requiredDeposit: 15000 },  // Task 46
+    //       46: { requiredDeposit: 25000 },  // Task 47
+    //       47: { requiredDeposit: 40000 },  // Task 48
+    //       48: { requiredDeposit: 60000 },  // Task 49
+    //       49: { requiredDeposit: 100000 }  // Task 50
+    //     };
+
+    //     const requirement = taskRequirements[taskIndex];
+    //     let validation = { valid: true };
+
+    //     if (requirement) {
+    //       // Check minimum deposit for first task
+    //       if (requirement.minDeposit && totalDeposits < requirement.minDeposit) {
+    //         validation = {
+    //           valid: false,
+    //           type: 'initial_deposit',
+    //           required: requirement.minDeposit,
+    //           message: `Minimum deposit of $${requirement.minDeposit} required`
+    //         };
+    //       }
+    //       // Check referrals requirement
+    //       else if (requirement.requiredReferrals && totalReferrals < requirement.requiredReferrals) {
+    //         validation = {
+    //           valid: false,
+    //           type: 'referrals',
+    //           required: requirement.requiredReferrals,
+    //           current: totalReferrals,
+    //           message: `${requirement.requiredReferrals} referrals required`
+    //         };
+    //       }
+    //       // Check special deposit requirement
+    //       else if (requirement.requiredDeposit && totalDeposits < requirement.requiredDeposit) {
+    //         validation = {
+    //           valid: false,
+    //           type: 'deposit',
+    //           required: requirement.requiredDeposit,
+    //           message: `Deposit of $${requirement.requiredDeposit} required`
+    //         };
+    //       }
+    //     }
+
+    //     res.json({
+    //       validation,
+    //       userStats: {
+    //         totalDeposits,
+    //         totalReferrals,
+    //         taskProgress: user.taskProgress || 0,
+    //         balance: user.balance || 0
+    //       }
+    //     });
+
+    //   } catch (error) {
+    //     console.error('Error validating task access:', error);
+    //     res.status(500).json({ error: 'Internal server error' });
+    //   }
+    // });
+
+    // 3. POST completeTaskProfit/:userId - নতুন API task complete এর জন্য
+    // app.post('/completeTaskProfit/:userId', verifyToken, async (req, res) => {
+    //   try {
+    //     const userId = req.params.userId;
+    //     const { taskIndex, reward } = req.body;
+
+    //     if (!ObjectId.isValid(userId)) {
+    //       return res.status(400).json({ error: 'Invalid user ID' });
+    //     }
+
+    //     if (typeof taskIndex !== 'number' || typeof reward !== 'number') {
+    //       return res.status(400).json({ error: 'Invalid task data' });
+    //     }
+
+    //     const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+    //     if (!user) {
+    //       return res.status(404).json({ error: 'User not found' });
+    //     }
+
+    //     const currentProgress = user.taskProgress || 0;
+    //     if (currentProgress !== taskIndex) {
+    //       return res.status(400).json({ error: 'Invalid task sequence' });
+    //     }
+
+    //     const session = client.startSession();
+
+    //     try {
+    //       await session.withTransaction(async () => {
+    //         // ✅ taskProgressUpdatedAt field update করুন
+    //         await userCollection.updateOne(
+    //           { _id: new ObjectId(userId) },
+    //           {
+    //             $inc: { balance: reward },
+    //             $set: {
+    //               taskProgress: currentProgress + 1,
+    //               taskProgressUpdatedAt: new Date() // ✅ এই field update করুন
+    //             }
+    //           },
+    //           { session }
+    //         );
+
+    //         // Record task completion transaction with taskIndex
+    //         await transactionCollection.insertOne({
+    //           userId: userId,
+    //           type: 'task_reward',
+    //           amount: reward,
+    //           description: `Live Trading Task ${taskIndex + 1} completion reward`,
+    //           status: 'approved',
+    //           taskIndex: taskIndex, // ✅ এই field frontend এ দেখাবে
+    //           createdAt: new Date(),
+    //           name: user.name,
+    //           email: user.email
+    //         }, { session });
+    //       });
+
+    //       // console.log(`LiveProfit Task ${taskIndex + 1} completed for user ${userId}. Reward: $${reward}`);
+
+    //       res.json({
+    //         success: true,
+    //         message: 'Task completed successfully',
+    //         reward: reward,
+    //         newTaskProgress: currentProgress + 1,
+    //         newBalance: (user.balance || 0) + reward,
+    //         updatedAt: new Date() // ✅ response এ timestamp add করুন
+    //       });
+
+    //     } finally {
+    //       await session.endSession();
+    //     }
+
+    //   } catch (error) {
+    //     console.error('Error completing live profit task:', error);
+    //     res.status(500).json({
+    //       error: error.message || 'Internal server error'
+    //     });
+    //   }
+    // });
+
+    // ✅ BACKEND FIX - Replace your validateTaskAccess API in server.js
+
     app.post('/validateTaskAccess/:userId', verifyToken, async (req, res) => {
       try {
         const userId = req.params.userId;
@@ -1156,28 +1349,24 @@ async function run() {
         const totalDeposits = depositStats.length > 0 ? depositStats[0].totalDeposits : 0;
         const totalReferrals = user.totalReferrals || 0;
 
-        // Task requirements matching frontend surveyTasks array
+        // ✅ CORRECTED Task requirements - EXACT match with frontend
+        // ✅ CORRECTED - EXACT MATCH with frontend
         const taskRequirements = {
-          // First task requires $50 minimum deposit
           0: { minDeposit: 50 },
-
-          // Task 17 (index 16) requires 10 referrals
           16: { requiredReferrals: 10 },
-
-          // Special deposit tasks matching frontend
-          25: { requiredDeposit: 80 },    // Task 26
-          30: { requiredDeposit: 140 },   // Task 31  
-          36: { requiredDeposit: 320 },   // Task 37
-          39: { requiredDeposit: 730 },   // Task 40
-          41: { requiredDeposit: 1300 },  // Task 42
-          42: { requiredDeposit: 2500 },  // Task 43
-          43: { requiredDeposit: 5000 },  // Task 44
-          44: { requiredDeposit: 8000 },  // Task 45
-          45: { requiredDeposit: 15000 }, // Task 46
-          46: { requiredDeposit: 25000 }, // Task 47
-          47: { requiredDeposit: 40000 }, // Task 48
-          48: { requiredDeposit: 60000 }, // Task 49
-          49: { requiredDeposit: 100000 } // Task 50
+          25: { requiredDeposit: 80 },     // Task 26
+          30: { requiredDeposit: 140 },    // Task 31  
+          36: { requiredDeposit: 320 },    // Task 37
+          39: { requiredDeposit: 730 },    // Task 40
+          41: { requiredDeposit: 1300 },   // Task 42
+          42: { requiredDeposit: 1500 },   // Task 43
+          43: { requiredDeposit: 2500 },   // Task 44 
+          44: { requiredDeposit: 8000 },   // Task 45 
+          45: { requiredDeposit: 15000 },  // Task 46 
+          46: { requiredDeposit: 25000 },  // Task 47 
+          47: { requiredDeposit: 40000 },  // Task 48 
+          48: { requiredDeposit: 60000 },  // Task 49 
+          49: { requiredDeposit: 100000 }  // Task 50 
         };
 
         const requirement = taskRequirements[taskIndex];
@@ -1190,6 +1379,7 @@ async function run() {
               valid: false,
               type: 'initial_deposit',
               required: requirement.minDeposit,
+              current: totalDeposits,
               message: `Minimum deposit of $${requirement.minDeposit} required`
             };
           }
@@ -1209,10 +1399,21 @@ async function run() {
               valid: false,
               type: 'deposit',
               required: requirement.requiredDeposit,
+              current: totalDeposits,
               message: `Deposit of $${requirement.requiredDeposit} required`
             };
           }
         }
+
+        // ✅ Enhanced logging for debugging
+        // console.log('🔍 Task Validation Debug:', {
+        //   taskIndex,
+        //   userId,
+        //   totalDeposits,
+        //   totalReferrals,
+        //   requirement,
+        //   validation
+        // });
 
         res.json({
           validation,
@@ -1225,12 +1426,12 @@ async function run() {
         });
 
       } catch (error) {
-        console.error('Error validating task access:', error);
+        // console.error('❌ Error validating task access:', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
 
-    // 3. POST completeTaskProfit/:userId - নতুন API task complete এর জন্য
+    // ✅ ADDITIONAL: Enhanced completeTaskProfit with better validation
     app.post('/completeTaskProfit/:userId', verifyToken, async (req, res) => {
       try {
         const userId = req.params.userId;
@@ -1250,22 +1451,91 @@ async function run() {
         }
 
         const currentProgress = user.taskProgress || 0;
+
+        // ✅ Enhanced task sequence validation
         if (currentProgress !== taskIndex) {
-          return res.status(400).json({ error: 'Invalid task sequence' });
+          // console.log('❌ Invalid task sequence:', {
+          //   userId,
+          //   currentProgress,
+          //   attemptedTask: taskIndex
+          // });
+          return res.status(400).json({
+            error: 'Invalid task sequence',
+            currentProgress,
+            attemptedTask: taskIndex
+          });
+        }
+
+        // ✅ RE-VALIDATE task access before completion
+        const depositStats = await transactionCollection.aggregate([
+          {
+            $match: {
+              userId: userId,
+              type: 'deposit',
+              status: 'approved'
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalDeposits: { $sum: '$amount' }
+            }
+          }
+        ]).toArray();
+
+        const totalDeposits = depositStats.length > 0 ? depositStats[0].totalDeposits : 0;
+        const totalReferrals = user.totalReferrals || 0;
+
+        // Same task requirements as validation API
+        const taskRequirements = {
+          0: { minDeposit: 50 },
+          16: { requiredReferrals: 10 },
+          25: { requiredDeposit: 80 },
+          30: { requiredDeposit: 140 },
+          36: { requiredDeposit: 320 },
+          39: { requiredDeposit: 730 },
+          41: { requiredDeposit: 1300 },
+          42: { requiredDeposit: 1500 },  // ✅ FIXED
+          43: { requiredDeposit: 2500 },  // ✅ FIXED
+          44: { requiredDeposit: 8000 },
+          45: { requiredDeposit: 15000 },
+          46: { requiredDeposit: 25000 },
+          47: { requiredDeposit: 40000 },
+          48: { requiredDeposit: 60000 },
+          49: { requiredDeposit: 100000 }
+        };
+
+        const requirement = taskRequirements[taskIndex];
+        if (requirement) {
+          if (requirement.minDeposit && totalDeposits < requirement.minDeposit) {
+            return res.status(400).json({
+              error: `Insufficient deposit. Required: $${requirement.minDeposit}, Current: $${totalDeposits}`
+            });
+          }
+          if (requirement.requiredReferrals && totalReferrals < requirement.requiredReferrals) {
+            return res.status(400).json({
+              error: `Insufficient referrals. Required: ${requirement.requiredReferrals}, Current: ${totalReferrals}`
+            });
+          }
+          if (requirement.requiredDeposit && totalDeposits < requirement.requiredDeposit) {
+            return res.status(400).json({
+              error: `Insufficient deposit. Required: $${requirement.requiredDeposit}, Current: $${totalDeposits}`
+            });
+          }
         }
 
         const session = client.startSession();
 
         try {
           await session.withTransaction(async () => {
-            // ✅ taskProgressUpdatedAt field update করুন
+            // Update user progress and balance
             await userCollection.updateOne(
               { _id: new ObjectId(userId) },
               {
                 $inc: { balance: reward },
                 $set: {
                   taskProgress: currentProgress + 1,
-                  taskProgressUpdatedAt: new Date() // ✅ এই field update করুন
+                  taskProgressUpdatedAt: new Date()
                 }
               },
               { session }
@@ -1278,14 +1548,14 @@ async function run() {
               amount: reward,
               description: `Live Trading Task ${taskIndex + 1} completion reward`,
               status: 'approved',
-              taskIndex: taskIndex, // ✅ এই field frontend এ দেখাবে
+              taskIndex: taskIndex,
               createdAt: new Date(),
               name: user.name,
               email: user.email
             }, { session });
           });
 
-          // console.log(`LiveProfit Task ${taskIndex + 1} completed for user ${userId}. Reward: $${reward}`);
+          // console.log(`✅ LiveProfit Task ${taskIndex + 1} completed for user ${userId}. Reward: $${reward}`);
 
           res.json({
             success: true,
@@ -1293,7 +1563,7 @@ async function run() {
             reward: reward,
             newTaskProgress: currentProgress + 1,
             newBalance: (user.balance || 0) + reward,
-            updatedAt: new Date() // ✅ response এ timestamp add করুন
+            updatedAt: new Date()
           });
 
         } finally {
@@ -1301,7 +1571,7 @@ async function run() {
         }
 
       } catch (error) {
-        console.error('Error completing live profit task:', error);
+        console.error('❌ Error completing live profit task:', error);
         res.status(500).json({
           error: error.message || 'Internal server error'
         });
@@ -1517,8 +1787,8 @@ async function run() {
     });
 
     // Send a ping to confirm a successful connection
-    // await client.db("admin").command({ ping: 1 });
-    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    await client.db("admin").command({ ping: 1 });
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
